@@ -6,13 +6,13 @@ import sys
 FONT_SIZE_BASE = 12 # Slightly smaller base for more room for many layers
 SCREEN_WIDTH = 0
 SCREEN_HEIGHT = 0
-FPS = 35 # Can adjust if performance is an issue with more layers
+FPS = 20 # Can adjust if performance is an issue with more layers
 
 KATAKANA_CHARS = [chr(code) for code in range(0x30A0, 0x30FF + 1)]
 # KATAKANA_CHARS.extend([str(i) for i in range(10)])
 # KATAKANA_CHARS.extend(['$', '+', '*', '%', '#', '@', '&'])
 
-TOTAL_LAYERS = 6 # Increased from 3 to 6
+TOTAL_LAYERS = 2 # Increased from 3 to 6
 
 class Symbol:
     def __init__(self, x, y, speed, color_base, font_size, layer_brightness_factor, is_leader=False):
@@ -26,7 +26,7 @@ class Symbol:
         self.font_size = font_size
         self.layer_brightness_factor = layer_brightness_factor
         self.is_leader = is_leader
-        self.alpha = 255
+        self.alpha = 155
 
     def set_random_symbol(self):
         current_time = pygame.time.get_ticks()
@@ -40,7 +40,7 @@ class Symbol:
 
     def draw(self, surface, font, position_in_stream, stream_transition_length):
         color_tuple = (0,0,0)
-        white_color = (230, 255, 230)
+        white_color = (230, 255, 255)
 
         if self.is_leader:
             r = int(white_color[0] * self.layer_brightness_factor)
@@ -187,7 +187,7 @@ class Stream:
 
 def get_user_color():
     colors = {
-        "green": (0, 255, 70), "blue": (0, 120, 255), "red": (255, 50, 50),
+        "green": (30, 255, 30), "blue": (0, 120, 255), "red": (255, 50, 50),
         "purple": (180, 0, 255), "cyan": (0, 255, 255), "yellow": (255,255,0),
         "white": (220,220,220)
     }
@@ -196,7 +196,9 @@ def get_user_color():
         choice = input("Enter base color for letters (e.g., green): ").lower()
         if choice in colors:
             return colors[choice]
-        print("Invalid color. Please choose from the list.")
+        else:
+            return colors["green"]
+        # print("Invalid color. Please choose from the list.")
 
 def main():
     global SCREEN_WIDTH, SCREEN_HEIGHT
