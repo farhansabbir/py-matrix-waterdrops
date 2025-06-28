@@ -1,5 +1,7 @@
 # Python Matrix Digital Rain
 
+![Output](https://raw.githubusercontent.com/farhansabbir/py-matrix-waterdrops/main/animation.gif)
+
 This project is a "digital rain" or "Matrix code" effect created using Python and the Pygame library. It simulates the iconic green falling characters from *The Matrix* films, featuring a multi-layered parallax effect for depth and realism.
 
  <!--- A placeholder GIF showing the effect --->
