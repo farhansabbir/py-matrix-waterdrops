@@ -163,20 +163,18 @@ class Stream:
     def update_and_draw(self, surface):
         current_ticks = pygame.time.get_ticks()
 
-        # --- Pause State Management for the LEADER ---
+        # --- Pause State Management ---
         if ENABLE_PAUSING and self.has_started and self.symbols:
             if self.is_paused:
                 if current_ticks >= self.pause_end_time:
-                    # Resume: unpause, reset speed, and schedule the next pause.
                     self.is_paused = False
                     self._reset_speed()
                     self._schedule_next_pause()
-            # Check if it's time to trigger a new pause (only if not already paused).
             elif current_ticks >= self.next_pause_time:
                 self.is_paused = True
                 self.pause_end_time = current_ticks + self.pause_duration
 
-        # --- Stream Start Logic ---
+        # --- Stream Start & Symbol Spawning ---
         if not self.has_started:
             if current_ticks - self.start_time > self.initial_delay:
                 self.has_started = True
@@ -185,33 +183,49 @@ class Stream:
             else:
                 return
 
-        # --- Symbol Spawning ---
         if len(self.symbols) < self.max_length and \
            current_ticks - self.spawn_new_symbol_timer > self.time_between_symbols:
             if self.symbols:
                 self._add_symbol(is_leader=False)
             self.spawn_new_symbol_timer = current_ticks
 
-        symbols_to_remove = []
-        
-        # --- Symbol Update and Drawing with Accumulation Logic ---
-        for i, symbol in enumerate(self.symbols):
-            # 1. Update character value for all symbols
-            symbol.set_random_symbol()
-
-            # 2. Update position
+        # --- Update Symbol Positions (from Tail to Head) ---
+        # This reversed loop is crucial. It uses the position of the symbol in front
+        # from the *same* frame, but *before* it has been updated, preventing chain reactions.
+        for i in range(len(self.symbols) - 1, -1, -1):
+            symbol = self.symbols[i]
+            
             if i == 0:  # Leader symbol
                 if not self.is_paused:
                     symbol.y += symbol.speed
             else:  # Follower symbols
                 previous_symbol = self.symbols[i-1]
-                # Move the follower down, but cap its position at the previous symbol's position.
-                # This makes the tail "accumulate" at the leader's location.
+                
+                # A follower moves at its own speed
                 new_y = symbol.y + symbol.speed
-                max_y = previous_symbol.y
-                symbol.y = min(new_y, max_y)
+                
+                # Its target is to be spaced out behind the symbol in front of it.
+                target_y = previous_symbol.y + self.line_height
+                
+                # The new position is the lesser of where it wants to go and its target.
+                # This creates the "peeling off" effect when resuming.
+                symbol.y = min(new_y, target_y)
 
-            # 3. Handle fading for the tail
+                # --- Accumulation Override ---
+                # If the stream is paused, followers must also cap their position at the head.
+                # This creates the "stacking" effect.
+                if self.is_paused:
+                    head_y = self.symbols[0].y
+                    if symbol.y > head_y:
+                        symbol.y = head_y
+        
+        # --- Update Characters, Draw, and Cleanup (from Head to Tail) ---
+        symbols_to_remove = []
+        for i, symbol in enumerate(self.symbols):
+            # 1. Update character value
+            symbol.set_random_symbol()
+
+            # 2. Handle fading for the tail
             fade_start_point = self.transition_length
             if i > fade_start_point:
                 relative_pos_in_tail = (i - fade_start_point) / max(1, (len(self.symbols) - 1 - fade_start_point))
@@ -219,10 +233,10 @@ class Stream:
             else:
                 symbol.alpha = 255
 
-            # 4. Draw the symbol
+            # 3. Draw the symbol
             symbol.draw(surface, self.font, i, self.transition_length)
 
-            # 5. Check if symbol is off-screen
+            # 4. Check if symbol is off-screen
             if symbol.y > SCREEN_HEIGHT + self.line_height * 2:
                 symbols_to_remove.append(symbol)
 
