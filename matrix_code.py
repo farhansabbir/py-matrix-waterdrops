@@ -35,10 +35,6 @@ class Symbol:
             self.value = random.choice(KATAKANA_CHARS)
             self.last_switch_time = current_time
 
-    def update(self): # Renamed from Symbol.update to avoid conflict if Stream also has update
-        self.y += self.speed
-        self.set_random_symbol()
-
     def draw(self, surface, font, position_in_stream, stream_transition_length):
         color_tuple = (0,0,0)
         white_color = (230, 255, 255)
@@ -108,6 +104,8 @@ class Stream:
             except FileNotFoundError:
                 self.font = pygame.font.SysFont('arial', self.font_size, bold=(self.layer_idx < 2)) # Bold for front layers
         
+        self.line_height = self.font.get_linesize()
+
         self.reset_stream_properties(initial_setup=True)
         self.has_started = False
         self.start_time = pygame.time.get_ticks()
@@ -155,37 +153,30 @@ class Stream:
             self.initial_delay = random.randint(1000, 8000 + self.layer_idx * 1500)
 
     def _add_symbol(self, is_leader=False): # Symbol objects are added to self.symbols
-        start_y = -self.font_size * random.randint(1,5)
+        start_y = -self.line_height * random.randint(1,5)
         symbol_speed = self.base_speed # All symbols in a stream now share the same speed
         # if is_leader: symbol_speed *= random.uniform(1.0, 1.05) # Leader slight speed boost
 
         new_sym = Symbol(self.x, start_y, symbol_speed, self.color_base, self.font_size, self.layer_brightness_factor, is_leader)
         self.symbols.append(new_sym)
 
-    def update_and_draw(self, surface): # Method of Stream class
+    def update_and_draw(self, surface):
         current_ticks = pygame.time.get_ticks()
 
-        # --- Pausing Logic ---
-        if ENABLE_PAUSING and self.has_started:
-            # 1. Check if the stream is currently paused.
+        # --- Pause State Management for the LEADER ---
+        if ENABLE_PAUSING and self.has_started and self.symbols:
             if self.is_paused:
                 if current_ticks >= self.pause_end_time:
                     # Resume: unpause, reset speed, and schedule the next pause.
                     self.is_paused = False
                     self._reset_speed()
                     self._schedule_next_pause()
-                else:
-                    # If still paused, just draw the symbols in their current positions and do nothing else.
-                    for i, symbol in enumerate(self.symbols):
-                        symbol.draw(surface, self.font, i, self.transition_length)
-                    return # Skip the rest of the update logic for this frame.
-
-            # 2. Check if it's time to trigger a new pause.
-            elif current_ticks >= self.next_pause_time and self.symbols:
+            # Check if it's time to trigger a new pause (only if not already paused).
+            elif current_ticks >= self.next_pause_time:
                 self.is_paused = True
                 self.pause_end_time = current_ticks + self.pause_duration
 
-
+        # --- Stream Start Logic ---
         if not self.has_started:
             if current_ticks - self.start_time > self.initial_delay:
                 self.has_started = True
@@ -194,38 +185,55 @@ class Stream:
             else:
                 return
 
-        # Add new symbols to the stream if it's not at max length
+        # --- Symbol Spawning ---
         if len(self.symbols) < self.max_length and \
            current_ticks - self.spawn_new_symbol_timer > self.time_between_symbols:
-            if self.symbols: # Make sure there's a leader to follow
+            if self.symbols:
                 self._add_symbol(is_leader=False)
             self.spawn_new_symbol_timer = current_ticks
 
         symbols_to_remove = []
-        # Update and draw existing symbols
+        
+        # --- Symbol Update and Drawing with Accumulation Logic ---
         for i, symbol in enumerate(self.symbols):
-            symbol.update() # Call the renamed Symbol.update()
-            
-            fade_start_point = self.transition_length 
+            # 1. Update character value for all symbols
+            symbol.set_random_symbol()
+
+            # 2. Update position
+            if i == 0:  # Leader symbol
+                if not self.is_paused:
+                    symbol.y += symbol.speed
+            else:  # Follower symbols
+                previous_symbol = self.symbols[i-1]
+                # Move the follower down, but cap its position at the previous symbol's position.
+                # This makes the tail "accumulate" at the leader's location.
+                new_y = symbol.y + symbol.speed
+                max_y = previous_symbol.y
+                symbol.y = min(new_y, max_y)
+
+            # 3. Handle fading for the tail
+            fade_start_point = self.transition_length
             if i > fade_start_point:
-                relative_pos_in_tail = (i - fade_start_point) / max(1, (len(self.symbols) -1 - fade_start_point)) # Use current length
+                relative_pos_in_tail = (i - fade_start_point) / max(1, (len(self.symbols) - 1 - fade_start_point))
                 symbol.alpha = max(0, int(255 * (1 - relative_pos_in_tail**1.8)))
             else:
                 symbol.alpha = 255
 
+            # 4. Draw the symbol
             symbol.draw(surface, self.font, i, self.transition_length)
 
-            if symbol.y > SCREEN_HEIGHT + self.font_size * 2: # If symbol is off screen
+            # 5. Check if symbol is off-screen
+            if symbol.y > SCREEN_HEIGHT + self.line_height * 2:
                 symbols_to_remove.append(symbol)
 
+        # --- Cleanup ---
         for sym in symbols_to_remove:
             if sym in self.symbols:
                 self.symbols.remove(sym)
 
-        # If all symbols of this stream are gone, reset it to fall again later
         if not self.symbols and self.has_started:
             self.has_started = False
-            self.start_time = current_ticks # Reset start time for new initial delay
+            self.start_time = current_ticks
             self.reset_stream_properties(initial_setup=False)
             if ENABLE_PAUSING:
                 self._schedule_next_pause()
