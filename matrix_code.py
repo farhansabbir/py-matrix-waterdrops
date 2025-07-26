@@ -3,10 +3,10 @@ import random
 import sys
 
 # --- Configuration ---
-FONT_SIZE_BASE = 12 # Slightly smaller base for more room for many layers
+FONT_SIZE_BASE = 10 # Slightly smaller base for more room for many layers
 SCREEN_WIDTH = 0
 SCREEN_HEIGHT = 0
-FPS = 20 # Can adjust if performance is an issue with more layers
+FPS = 30 # Can adjust if performance is an issue with more layers
 ENABLE_PAUSING = True # Set to False to disable the random pausing effect
 
 KATAKANA_CHARS = [chr(code) for code in range(0x30A0, 0x30FF + 1)]
@@ -120,8 +120,8 @@ class Stream:
 
     def _schedule_next_pause(self):
         """Sets a random time for the next pause to occur."""
-        self.next_pause_time = pygame.time.get_ticks() + random.randint(3000, 15000)
-        self.pause_duration = random.randint(500, 4000)
+        self.next_pause_time = pygame.time.get_ticks() + random.randint(1000, 15000) # when should the pause happen again
+        self.pause_duration = random.randint(5, 100) # the pause duration of the head character
 
     def _reset_speed(self):
         """Resets the speed of the stream to a new random value."""
