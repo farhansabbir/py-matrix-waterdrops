@@ -7,6 +7,7 @@ FONT_SIZE_BASE = 12 # Slightly smaller base for more room for many layers
 SCREEN_WIDTH = 0
 SCREEN_HEIGHT = 0
 FPS = 20 # Can adjust if performance is an issue with more layers
+ENABLE_PAUSING = True # Set to False to disable the random pausing effect
 
 KATAKANA_CHARS = [chr(code) for code in range(0x30A0, 0x30FF + 1)]
 # KATAKANA_CHARS.extend([str(i) for i in range(10)])
@@ -111,6 +112,28 @@ class Stream:
         self.has_started = False
         self.start_time = pygame.time.get_ticks()
 
+        # --- Pausing Properties ---
+        self.is_paused = False
+        self.pause_end_time = 0
+        self.next_pause_time = 0
+        if ENABLE_PAUSING:
+            self._schedule_next_pause()
+
+
+    def _schedule_next_pause(self):
+        """Sets a random time for the next pause to occur."""
+        self.next_pause_time = pygame.time.get_ticks() + random.randint(3000, 15000)
+        self.pause_duration = random.randint(500, 4000)
+
+    def _reset_speed(self):
+        """Resets the speed of the stream to a new random value."""
+        speed_scale_factor = 1.0 - (self.layer_idx / (TOTAL_LAYERS - 1)) * 0.8 if TOTAL_LAYERS > 1 else 1.0
+        min_speed = 0.5 + (2.5 * speed_scale_factor)
+        max_speed = 1.5 + (4.5 * speed_scale_factor)
+        self.base_speed = random.uniform(max(0.3, min_speed), max(0.6, max_speed))
+        for symbol in self.symbols:
+            symbol.speed = self.base_speed
+
 
     def reset_stream_properties(self, initial_setup=False):
         self.max_length = random.randint(8, 30 - self.layer_idx * 2) # Back layers can be shorter
@@ -141,6 +164,27 @@ class Stream:
 
     def update_and_draw(self, surface): # Method of Stream class
         current_ticks = pygame.time.get_ticks()
+
+        # --- Pausing Logic ---
+        if ENABLE_PAUSING and self.has_started:
+            # 1. Check if the stream is currently paused.
+            if self.is_paused:
+                if current_ticks >= self.pause_end_time:
+                    # Resume: unpause, reset speed, and schedule the next pause.
+                    self.is_paused = False
+                    self._reset_speed()
+                    self._schedule_next_pause()
+                else:
+                    # If still paused, just draw the symbols in their current positions and do nothing else.
+                    for i, symbol in enumerate(self.symbols):
+                        symbol.draw(surface, self.font, i, self.transition_length)
+                    return # Skip the rest of the update logic for this frame.
+
+            # 2. Check if it's time to trigger a new pause.
+            elif current_ticks >= self.next_pause_time and self.symbols:
+                self.is_paused = True
+                self.pause_end_time = current_ticks + self.pause_duration
+
 
         if not self.has_started:
             if current_ticks - self.start_time > self.initial_delay:
@@ -183,6 +227,8 @@ class Stream:
             self.has_started = False
             self.start_time = current_ticks # Reset start time for new initial delay
             self.reset_stream_properties(initial_setup=False)
+            if ENABLE_PAUSING:
+                self._schedule_next_pause()
 
 
 def get_user_color():
@@ -191,14 +237,18 @@ def get_user_color():
         "purple": (180, 0, 255), "cyan": (0, 255, 255), "yellow": (255,255,0),
         "white": (220,220,220)
     }
+    # Default to green in a non-interactive environment
+    if not sys.stdout.isatty():
+        return colors["green"]
+
     while True:
         print("Available colors: " + ", ".join(colors.keys()))
         choice = input("Enter base color for letters (e.g., green): ").lower()
         if choice in colors:
             return colors[choice]
-        else:
+        elif not choice:
             return colors["green"]
-        # print("Invalid color. Please choose from the list.")
+        print("Invalid color. Please choose from the list.")
 
 def main():
     global SCREEN_WIDTH, SCREEN_HEIGHT
